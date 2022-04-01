@@ -1,6 +1,6 @@
 {
-  "name": "eslint-plugin-dollar-sign",
-  "version": "1.0.2",
+  "name": "@4dvn-hieu/eslint-plugin-dollar-sign",
+  "version": "1.0.3",
   "description": "Enforce $varName for jQuery assignment.",
   "keywords": [
     "eslint",

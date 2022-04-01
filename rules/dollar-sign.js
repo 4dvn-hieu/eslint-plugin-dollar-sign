@@ -5,171 +5,192 @@
  * @copyright 2016 Erik Desjardins. All rights reserved.
  * See LICENSE file in root directory for full license.
  */
-'use strict';
+"use strict";
 
-module.exports = function(context) {
-	var ignoreProperties = context.options[0] === 'ignoreProperties';
+// NOTE: Migrate to eslint 8: https://eslint.org/docs/8.0.0/user-guide/migrating-to-8.0.0#-rules-require-metafixable-to-provide-fixes
+module.exports = {
+  meta: {
+    fixable: "code", // or "whitespace"
+  },
 
-	function shouldVarNameStartWithDollar(name, assignee) {
-		return (
-			name && !(/^_?\$/).test(name) &&
-			assignee && assignee.type === 'CallExpression' &&
-			assignee.callee.type === 'Identifier' && assignee.callee.name === '$'
-		);
-	}
+  create(context) {
+    var ignoreProperties = context.options[0] === "ignoreProperties";
 
-	function reportIdentifier(identifier, fix) {
-		var reportObj = {
-			node: identifier,
-			message: 'jQuery identifiers must start with a $'
-		};
+    function shouldVarNameStartWithDollar(name, assignee) {
+      return (
+        name &&
+        !/^_?\$/.test(name) &&
+        assignee &&
+        assignee.type === "CallExpression" &&
+        assignee.callee.type === "Identifier" &&
+        assignee.callee.name === "$"
+      );
+    }
 
-		if (fix) {
-			reportObj.fix = function(fixer) {
-				return fixer.insertTextBefore(identifier, '$');
-			};
-		}
+    function reportIdentifier(identifier, fix) {
+      var reportObj = {
+        node: identifier,
+        message: "jQuery identifiers must start with a $",
+      };
 
-		context.report(reportObj);
-	}
+      if (fix) {
+        reportObj.fix = function (fixer) {
+          return fixer.insertTextBefore(identifier, "$");
+        };
+      }
 
-	function collectReferenceIdentifiers(variable) {
-		var allRefs = variable.references.concat(variable.scope.references);
-		var refs = variable.identifiers.slice();
-		var i, id;
+      context.report(reportObj);
+    }
 
-		// avoid adding duplicate references
-		for (i = 0; i < allRefs.length; ++i) {
-			id = allRefs[i].identifier;
+    function collectReferenceIdentifiers(variable) {
+      var allRefs = variable.references.concat(variable.scope.references);
+      var refs = variable.identifiers.slice();
+      var i, id;
 
-			if (refs.indexOf(id) !== -1) continue;
+      // avoid adding duplicate references
+      for (i = 0; i < allRefs.length; ++i) {
+        id = allRefs[i].identifier;
 
-			if (id.name === variable.name) {
-				refs.push(id);
-			}
-		}
+        if (refs.indexOf(id) !== -1) continue;
 
-		return refs;
-	}
+        if (id.name === variable.name) {
+          refs.push(id);
+        }
+      }
 
-	function reportAllReferences(variable) {
-		var refs = collectReferenceIdentifiers(variable);
-		var autofix = true;
-		var i, id;
+      return refs;
+    }
 
-		for (i = 0; i < refs.length; ++i) {
-			id = refs[i];
-			if (id.parent && id.parent.type === 'Property' && id.parent.shorthand) {
-				// if any reference is used for a shorthand property, don't autofix
-				autofix = false;
-				break;
-			}
-		}
+    function reportAllReferences(variable) {
+      var refs = collectReferenceIdentifiers(variable);
+      var autofix = true;
+      var i, id;
 
-		for (i = 0; i < refs.length; ++i) {
-			id = refs[i];
-			reportIdentifier(id, autofix);
-		}
-	}
+      for (i = 0; i < refs.length; ++i) {
+        id = refs[i];
+        if (id.parent && id.parent.type === "Property" && id.parent.shorthand) {
+          // if any reference is used for a shorthand property, don't autofix
+          autofix = false;
+          break;
+        }
+      }
 
-	function shouldVarAssignmentStartWithDollar(def, variable) {
-		var refs = collectReferenceIdentifiers(variable);
-		var i, parent;
+      for (i = 0; i < refs.length; ++i) {
+        id = refs[i];
+        reportIdentifier(id, autofix);
+      }
+    }
 
-		for (i = 0; i < refs.length; ++i) {
-			parent = refs[i].parent;
+    function shouldVarAssignmentStartWithDollar(def, variable) {
+      var refs = collectReferenceIdentifiers(variable);
+      var i, parent;
 
-			if (!parent || parent.type !== 'AssignmentExpression' || parent.operator !== '=') continue;
+      for (i = 0; i < refs.length; ++i) {
+        parent = refs[i].parent;
 
-			if (shouldVarNameStartWithDollar(def.name.name, parent.right)) return true;
-		}
+        if (
+          !parent ||
+          parent.type !== "AssignmentExpression" ||
+          parent.operator !== "="
+        )
+          continue;
 
-		return false;
-	}
+        if (shouldVarNameStartWithDollar(def.name.name, parent.right))
+          return true;
+      }
 
-	function checkVarDeclarations(scope) {
-		var i, variable, def;
+      return false;
+    }
 
-		for (i = 0; i < scope.variables.length; ++i) {
-			variable = scope.variables[i];
+    function checkVarDeclarations(scope) {
+      var i, variable, def;
 
-			if (!variable.defs.length) continue;
-			def = variable.defs[0];
+      for (i = 0; i < scope.variables.length; ++i) {
+        variable = scope.variables[i];
 
-			if (!def.node.id || def.node.id.type === 'ObjectPattern' || def.node.id.type === 'ArrayPattern') continue;
+        if (!variable.defs.length) continue;
+        def = variable.defs[0];
 
-			if (
-				def.node.init ?
-					shouldVarNameStartWithDollar(def.name.name, def.node.init) :
-					shouldVarAssignmentStartWithDollar(def, variable)
-			) {
-				reportAllReferences(variable);
-			}
-		}
+        if (
+          !def.node.id ||
+          def.node.id.type === "ObjectPattern" ||
+          def.node.id.type === "ArrayPattern"
+        )
+          continue;
 
-		for (i = 0; i < scope.childScopes.length; ++i) {
-			checkVarDeclarations(scope.childScopes[i]);
-		}
-	}
+        if (
+          def.node.init
+            ? shouldVarNameStartWithDollar(def.name.name, def.node.init)
+            : shouldVarAssignmentStartWithDollar(def, variable)
+        ) {
+          reportAllReferences(variable);
+        }
+      }
 
-	function checkAssignmentExpressionForObject(node) {
-		if (ignoreProperties) {
-			return;
-		}
+      for (i = 0; i < scope.childScopes.length; ++i) {
+        checkVarDeclarations(scope.childScopes[i]);
+      }
+    }
 
-		var left = node.left;
-		if (left.computed) {
-			return;
-		}
+    function checkAssignmentExpressionForObject(node) {
+      if (ignoreProperties) {
+        return;
+      }
 
-		if (left.type === 'ObjectPattern' || left.type === 'ArrayPattern') {
-			return;
-		}
+      var left = node.left;
+      if (left.computed) {
+        return;
+      }
 
-		if (!left.property) {
-			return;
-		}
+      if (left.type === "ObjectPattern" || left.type === "ArrayPattern") {
+        return;
+      }
 
-		if (shouldVarNameStartWithDollar(left.property.name, node.right)) {
-			reportIdentifier(left.property, false);
-		}
-	}
+      if (!left.property) {
+        return;
+      }
 
-	function checkObjectExpression(node) {
-		if (ignoreProperties) {
-			return;
-		}
+      if (shouldVarNameStartWithDollar(left.property.name, node.right)) {
+        reportIdentifier(left.property, false);
+      }
+    }
 
-		var props = node.properties;
+    function checkObjectExpression(node) {
+      if (ignoreProperties) {
+        return;
+      }
 
-		if (!props) {
-			return;
-		}
+      var props = node.properties;
 
-		props.forEach(function(prop) {
-			var left = prop.key;
+      if (!props) {
+        return;
+      }
 
-			if (!left) {
-				return;
-			}
+      props.forEach(function (prop) {
+        var left = prop.key;
 
-			if (shouldVarNameStartWithDollar(left.name, prop.value)) {
-				reportIdentifier(left, false);
-			}
-		});
-	}
+        if (!left) {
+          return;
+        }
 
-	return {
-		ObjectExpression: checkObjectExpression,
-		AssignmentExpression: checkAssignmentExpressionForObject,
-		'Program:exit': function() {
-			checkVarDeclarations(context.getScope());
-		}
-	};
+        if (shouldVarNameStartWithDollar(left.name, prop.value)) {
+          reportIdentifier(left, false);
+        }
+      });
+    }
+
+    return {
+      ObjectExpression: checkObjectExpression,
+      AssignmentExpression: checkAssignmentExpressionForObject,
+      "Program:exit": function () {
+        checkVarDeclarations(context.getScope());
+      },
+    };
+  },
 };
 
 module.exports.schema = [
-	{
-		enum: ['ignoreProperties']
-	}
+  {
+    enum: ["ignoreProperties"],
+  },
 ];
